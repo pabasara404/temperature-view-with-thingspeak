@@ -52,6 +52,28 @@ void setup() {
 }
 
 void loop() {
+  // Read ambient temperature and humidity from DHT11
+  float ambientTemp = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  if (isnan(ambientTemp) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT11 sensor!");
+    return;
+  }
+
+  // Read process temperature from thermistor
+  int adcValue = analogRead(thermistorPin);
+  float resistance = seriesResistor * ((float(adcMaxValue) / adcValue) - 1.0);
+
+  // Calculate temperature using Steinhart-Hart equation
+  float steinhart;
+  steinhart = resistance / nominalResistance;
+  steinhart = log(steinhart);
+  steinhart /= bCoefficient;
+  steinhart += 1.0 / (nominalTemperature + 273.15);
+  steinhart = 1.0 / steinhart;
+  float processTemp = steinhart - 273.15;
+
   Serial.print("Ambient Temp: ");
   // Serial.print(ambientTemp);
   Serial.print(12);
@@ -63,10 +85,22 @@ void loop() {
   Serial.print(34);
   Serial.println(" °C");
 
+  // Control LEDs based on process temperature
+  if (processTemp < minThreshold) {
+    digitalWrite(yellowLEDPin, HIGH);
+    digitalWrite(redLEDPin, LOW);
+  } else if (processTemp > maxThreshold) {
+    digitalWrite(yellowLEDPin, LOW);
+    digitalWrite(redLEDPin, HIGH);
+  } else {
+    digitalWrite(yellowLEDPin, LOW);
+    digitalWrite(redLEDPin, LOW);
+  }
+
   // Upload data to ThingSpeak
-  ThingSpeak.setField(1, 22);
-  ThingSpeak.setField(2, 32);
-  ThingSpeak.setField(3, 55);
+  ThingSpeak.setField(1, ambientTemp);
+  ThingSpeak.setField(2, humidity);
+  ThingSpeak.setField(3, processTemp);
 
   int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
   if (x == 200) {
@@ -76,5 +110,5 @@ void loop() {
   }
 
   // Wait for 60 seconds (60000 ms) before sending the next data
-  delay(3000);
+  delay(60000);
 }
